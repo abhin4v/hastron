@@ -1,12 +1,17 @@
+{-# LANGUAGE RecordWildCards #-}
 module Hastron.Game.Types where
 
-import Data.HashMap.Strict (HashMap)
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as Map
+import           Data.HashSet        (HashSet)
+import qualified Data.HashSet        as Set
+import           Data.Tuple          (swap)
 
 type Point = (Int, Int)
 
 data Direction = Left | Right | Up | Down deriving (Show, Eq, Ord, Enum)
 
-data Velocity = Velocity Double Direction deriving (Show, Eq, Ord)
+data Velocity = Velocity Int Direction deriving (Show, Eq, Ord)
 
 type PlayerId = Int
 
@@ -39,19 +44,42 @@ data PlayerEndState = PlayerWinner | PlayerLoser | PlayerDropped
 data GameState = GameStarted | GameInit | GameFinished
                  deriving (Show, Eq, Ord, Enum)
 
-data Game = Game { gamePlayers :: [Player]
+data GameMap = GameMap { size                 :: Int
+                       , gameMapBlockedPoints :: HashSet Point }
+               deriving (Show, Eq)
+
+data Game = Game { gamePlayers :: HashMap PlayerId Player
                  , gameState   :: GameState
+                 , gameMap     :: GameMap
                  } deriving (Show, Eq)
+
+type GameResult = HashMap PlayerId (PlayerScore, PlayerEndState)
 
 data InEvent = InPlayerTurnLeft PlayerId
              | InPlayerTurnRight PlayerId
              | InPlayerBoostActivate PlayerId
              | InPlayerBoostDeactivate PlayerId
              | InPlayerStateChange PlayerId PlayerState
+             | InPlayerIdle PlayerId
              deriving (Show, Eq, Ord)
 
 data OutEvent = OutPlayerPosition PlayerId Point Direction
-              | OutPlayerStateChange PlayerId PlayerState Point
+              | OutPlayerStateChange PlayerId PlayerState
               | OutGameStateChange GameState
-              | OutGameOver (HashMap PlayerId (PlayerScore, PlayerEndState))
+              | OutGameOver GameResult
               deriving (Show, Eq)
+
+emptyGameMap :: Int -> GameMap
+emptyGameMap size = GameMap size $ Set.fromList borderPoints
+  where
+    borderPoints = let xs = [(x, y) | x <- [-1, size], y <- [0 .. size - 1]]
+                   in xs ++ map swap xs
+
+emptyGame :: Int -> Game
+emptyGame size = Game Map.empty GameInit $ emptyGameMap size
+
+addPlayer :: Game -> Player -> Game
+addPlayer game@Game{gameMap = gameMap@GameMap{..}, ..} player@Player{..} =
+  game { gamePlayers = Map.insert playerId player gamePlayers
+       , gameMap = gameMap { gameMapBlockedPoints =
+                               Set.insert playerPosition gameMapBlockedPoints }}
