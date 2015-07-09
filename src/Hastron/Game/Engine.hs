@@ -41,7 +41,7 @@ checkTrail GameMap{..} trail =
      else (trail', PlayerDead)
 
 stepGame :: Game -> InEvent -> (Game, [OutEvent])
-stepGame game@Game{gameMap = gameMap@GameMap{..}, ..} inEvent = stepGame' inEvent
+stepGame game@Game{gameMap = gameMap@GameMap{..}, ..} = stepGame'
   where
     stepGame' (InPlayerTurnLeft playerId)  = stepTurnEvent playerId $ moveAfterTurn leftTurn
     stepGame' (InPlayerTurnRight playerId) = stepTurnEvent playerId $ moveAfterTurn rightTurn
@@ -66,10 +66,8 @@ stepGame game@Game{gameMap = gameMap@GameMap{..}, ..} inEvent = stepGame' inEven
                                    foldl' (flip Set.insert) gameMapBlockedPoints trail }
             game'     = game { gamePlayers = Map.insert playerId player' gamePlayers
                              , gameMap     = gameMap' }
-            outEvents = [OutPlayerPosition playerId pos' dir'] ++
-                          (if playerState /= playerState'
-                           then [OutPlayerStateChange playerId playerState']
-                           else [])
+            outEvents = OutPlayerPosition playerId pos' dir' :
+                          [OutPlayerStateChange playerId playerState' | playerState /= playerState']
           in (game', outEvents)
 
     score (x1, y1) (x2, y2) = abs (x1 - x2) + abs (y1 - y2)
