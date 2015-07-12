@@ -18,7 +18,7 @@ data PlayerState = PlayerAlive
                  | PlayerDead
                  | PlayerDisconnected
                  | PlayerLeft
-                 deriving (Show, Eq, Ord, Enum)
+                 deriving (Show, Eq, Ord, Enum, Bounded)
 
 type PlayerTrail = [Point]
 
@@ -38,7 +38,7 @@ data Player = Player { playerId       :: PlayerId
                      } deriving (Show, Eq)
 
 data PlayerEndState = PlayerWinner | PlayerLoser | PlayerDropped
-                      deriving (Show, Eq, Ord, Enum)
+                      deriving (Show, Eq, Ord, Enum, Bounded)
 
 data GameState = GameStarted | GameInit | GameFinished
                  deriving (Show, Eq, Ord, Enum)

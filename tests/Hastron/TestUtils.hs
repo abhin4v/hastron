@@ -16,7 +16,7 @@ instance (Enum a, Bounded a) => Arbit.Arbitrary (Enum' a) where
 
 properties :: Test.TestTree
 properties = Test.testGroup "Utils Properties"
-  [ QC.testProperty "Additive inverse for turning" $ 
+  [ QC.testProperty "Additive inverse for turning" $
       \n e -> prop_additive_turning_inverse (n :: Int) (e :: Enum' Char)
   ]
 
