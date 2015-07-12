@@ -1,10 +1,14 @@
 module Hastron.Game.Types where
 
-import Data.HashMap.Strict (HashMap)
+import           Data.HashMap.Strict (HashMap)
 
 type Point = (Int, Int)
 
-data Direction = Left | Right | Up | Down deriving (Show, Eq, Ord, Enum)
+data Direction = Left
+               | Up
+               | Right
+               | Down
+               deriving (Show, Eq, Ord, Enum, Bounded)
 
 data Velocity = Velocity Double Direction deriving (Show, Eq, Ord)
 
