@@ -79,6 +79,9 @@ emptyGameMap size = GameMap size $ Set.fromList borderPoints
 emptyGame :: Int -> Game
 emptyGame size = Game Map.empty GameInit $ emptyGameMap size
 
+newPlayer :: Int -> Point -> Velocity -> Double -> Player
+newPlayer pId pos velocity boost = Player pId PlayerAlive pos velocity [pos] (PlayerBoost False boost) 0 0
+
 addPlayer :: Game -> Player -> Game
 addPlayer game@Game{gameMap = gameMap@GameMap{..}, ..} player@Player{..} =
   game { gamePlayers = Map.insert playerId player gamePlayers
