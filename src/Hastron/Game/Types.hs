@@ -36,6 +36,7 @@ data Player = Player { playerId       :: PlayerId
                      , playerTrail    :: PlayerTrail
                      , playerBoost    :: PlayerBoost
                      , playerScore    :: PlayerScore
+                     , playerLastEvent :: Int
                      } deriving (Show, Eq)
 
 data PlayerEndState = PlayerWinner | PlayerLoser | PlayerDropped

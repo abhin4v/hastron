@@ -32,10 +32,13 @@ move timeElapsed (x, y) (Velocity speed dir) = move' dir
     move' Up    = tail [(x, y') | y' <- [y, y - 1 .. y - dist]]
     move' Down  = tail [(x, y') | y' <- [y .. y + dist]]
 
-moveAfterTurn :: (Direction -> Direction) ->  Int -> Point -> Velocity -> (PlayerTrail, Velocity)
-moveAfterTurn turn timeElapsed point (Velocity speed dir) =
-  let vel' = Velocity speed $ turn dir
-  in (move timeElapsed point vel', vel')
+turn :: (Direction -> Direction) -> Velocity -> Velocity
+turn turnFn (Velocity speed dir) =
+  Velocity speed $ turnFn dir
+
+moveAndTurn :: (Direction -> Direction) ->  Int -> Point -> Velocity -> (PlayerTrail, Velocity)
+moveAndTurn turnFn timeElapsed point vel =
+  (move timeElapsed point vel, turn turnFn vel)
 
 checkTrail :: GameMap -> PlayerTrail -> (PlayerTrail, PlayerState)
 checkTrail GameMap{..} trail =
@@ -45,21 +48,21 @@ checkTrail GameMap{..} trail =
      else (trail', PlayerDead)
 
 stepGame :: Game -> Int -> InEvent -> (Game, [OutEvent])
-stepGame game@Game{gameMap = gameMap@GameMap{..}, ..} timeElapsed = stepGame'
+stepGame game@Game{gameMap = gameMap@GameMap{..}, ..} time = stepGame'
   where
     stepGame' (InPlayerTurnLeft playerId)  =
-      stepTurnEvent playerId $ moveAfterTurn leftTurn timeElapsed
+      stepTurnEvent playerId $ moveAndTurn leftTurn
     stepGame' (InPlayerTurnRight playerId) =
-      stepTurnEvent playerId $ moveAfterTurn rightTurn timeElapsed
+      stepTurnEvent playerId $ moveAndTurn rightTurn
     stepGame' (InPlayerIdle playerId)      =
-      stepTurnEvent playerId $ moveAfterTurn noTurn timeElapsed
+      stepTurnEvent playerId $ moveAndTurn noTurn
 
     stepTurnEvent pId moveFn =
       flip (maybe (game, [])) (Map.lookup pId gamePlayers) $ \player@Player{..} ->
         if playerState /= PlayerAlive
         then (game, [])
         else let
-            (revTrail, vel'@(Velocity _ dir')) = moveFn playerPosition playerVelocity
+            (revTrail, vel'@(Velocity _ dir')) = moveFn (time - playerLastEvent) playerPosition playerVelocity
             (checkedTrail, playerState')       = checkTrail gameMap revTrail
             trail                              = reverse checkedTrail
             pos'                               = if null trail then playerPosition else head trail
@@ -68,6 +71,7 @@ stepGame game@Game{gameMap = gameMap@GameMap{..}, ..} timeElapsed = stepGame'
                                , playerVelocity = vel'
                                , playerTrail    = trail ++ playerTrail
                                , playerScore    = playerScore + score playerPosition pos'
+                               , playerLastEvent = time
                                }
             gameMap'  = gameMap { gameMapBlockedPoints =
                                    foldl' (flip Set.insert) gameMapBlockedPoints trail }
@@ -81,6 +85,6 @@ stepGame game@Game{gameMap = gameMap@GameMap{..}, ..} timeElapsed = stepGame'
 
 runGame :: Game -> [(Int, InEvent)] -> (Game, [OutEvent])
 runGame initialGame inEvents =
-  foldl (\(game, outEvents) (timeElapsed, inEvent) ->
-            fmap (outEvents ++) $ stepGame game timeElapsed inEvent)
+  foldl (\(game, outEvents) (time, inEvent) ->
+            fmap (outEvents ++) $ stepGame game time inEvent)
         (initialGame, []) inEvents
