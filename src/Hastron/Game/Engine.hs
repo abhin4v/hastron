@@ -6,8 +6,9 @@ import           Control.Applicative    (Applicative)
 import           Control.Monad.Identity (Identity, runIdentity)
 import           Control.Monad.Reader   (MonadReader, ask)
 import           Control.Monad.RWS      (MonadRWS, RWST, execRWST)
-import           Control.Monad.State    (MonadState, get, put)
+import           Control.Monad.State    (MonadState, get, put, modify)
 import           Control.Monad.Writer   (MonadWriter, tell)
+import           Data.Bifunctor         (second)
 import           Data.DList             (DList)
 import qualified Data.DList             as DList
 import qualified Data.HashMap.Strict    as Map
@@ -15,21 +16,6 @@ import qualified Data.HashSet           as Set
 import           Data.List              (foldl')
 import           Hastron.Game.Types
 import           Prelude                hiding (Left, Right)
-
-leftTurn :: Direction -> Direction
-leftTurn Left  = Down
-leftTurn Right = Up
-leftTurn Up    = Left
-leftTurn Down  = Right
-
-rightTurn :: Direction -> Direction
-rightTurn Left  = Up
-rightTurn Right = Down
-rightTurn Up    = Right
-rightTurn Down  = Left
-
-noTurn :: Direction -> Direction
-noTurn = id
 
 newtype GameEngine a =
   GameEngine { _runGameEngine :: RWST GameSettings (DList OutEvent) (GameMap, Player) Identity a }
@@ -54,22 +40,22 @@ move timeElapsed = do
   settings <- ask
   go settings state
   where
-    go GameSettings{..}
-       (gameMap@GameMap{..}, player@Player{playerBoost = playerBoost@PlayerBoost{..}, ..})
+    go GameSettings{ .. } (gameMap@GameMap{ .. }, player@Player{ .. })
       | playerState /= PlayerAlive    || timeElapsed < 0 = return ()
-      | not boostActive || boostFuel >= timeElapsed      = movePlayer
+      | not boostActive || boostFuel >= timeElapsed      = move'
       | otherwise                                        =
           move boostFuel >> move (timeElapsed - boostFuel)
       where
         (x, y)               = playerPosition
         (Velocity speed dir) = playerVelocity
+        PlayerBoost{ .. }      = playerBoost
         dist                 =
           timeElapsed * speed * (if boostActive && boostFuel > 0 then gameBoostFactor else 1)
 
-        move' Left  = tail [(x', y) | x' <- [x, x - 1 .. x - dist]]
-        move' Right = tail [(x', y) | x' <- [x .. x + dist]]
-        move' Up    = tail [(x, y') | y' <- [y, y - 1 .. y - dist]]
-        move' Down  = tail [(x, y') | y' <- [y .. y + dist]]
+        makeTrail Left  = tail [(x', y) | x' <- [x, x - 1 .. x - dist]]
+        makeTrail Right = tail [(x', y) | x' <- [x .. x + dist]]
+        makeTrail Up    = tail [(x, y') | y' <- [y, y - 1 .. y - dist]]
+        makeTrail Down  = tail [(x, y') | y' <- [y .. y + dist]]
 
         checkTrail trail =
           let trail' = takeWhile (not . flip Set.member gameMapBlockedPoints) trail
@@ -77,9 +63,9 @@ move timeElapsed = do
              then (trail, PlayerAlive)
              else (trail', PlayerDead)
 
-        movePlayer = do
+        move' = do
           let
-            revTrail                     = move' dir
+            revTrail                     = makeTrail dir
             (checkedTrail, playerState') = checkTrail revTrail
             trail                        = reverse checkedTrail
             pos'                         = if null trail then playerPosition else head trail
@@ -97,32 +83,40 @@ move timeElapsed = do
           put (gameMap', player')
           tell $ DList.fromList outEvents
 
+leftTurn :: Direction -> Direction
+leftTurn Left  = Down
+leftTurn Right = Up
+leftTurn Up    = Left
+leftTurn Down  = Right
+
+rightTurn :: Direction -> Direction
+rightTurn Left  = Up
+rightTurn Right = Down
+rightTurn Up    = Right
+rightTurn Down  = Left
+
+noTurn :: Direction -> Direction
+noTurn = id
+
 turn :: (Direction -> Direction) -> GameEngine ()
-turn turnFn = get >>= go
-  where
-    go (gameMap, player@Player{playerVelocity = Velocity speed dir}) =
-      put ( gameMap, player { playerVelocity = Velocity speed $ turnFn dir })
+turn turnFn = modify . second $ \player@Player{ playerVelocity = Velocity speed dir } ->
+  player { playerVelocity = Velocity speed $ turnFn dir }
 
 changeBoost :: Bool -> GameEngine ()
-changeBoost boostActive = get >>= go
-  where
-    go (gameMap, player@Player{..}) =
-      put (gameMap, player { playerBoost = playerBoost { boostActive = boostActive } })
+changeBoost boostActive = modify . second $ \player@Player{ .. } ->
+  player { playerBoost = playerBoost { boostActive = boostActive } }
 
 refillBoost :: Int -> GameEngine ()
 refillBoost timeElapsed = do
-  state    <- get
-  settings <- ask
-  go settings state
-  where
-    go GameSettings{..} (gameMap, player@Player{..}) = do
-      let boostFuel'   = floor (fromIntegral timeElapsed * gameBoostRefillFactor)
-          playerBoost' = playerBoost { boostFuel = boostFuel' }
-      put (gameMap, player { playerBoost = playerBoost' })
-      tell $ DList.fromList [OutPlayerBoostChange playerId playerBoost' | playerBoost /= playerBoost']
+  (gameMap, player@Player{ .. }) <- get
+  GameSettings{ .. }             <- ask
+  let boostFuel'   = floor (fromIntegral timeElapsed * gameBoostRefillFactor)
+      playerBoost' = playerBoost { boostFuel = boostFuel' }
+  put (gameMap, player { playerBoost = playerBoost' })
+  tell $ DList.fromList [OutPlayerBoostChange playerId playerBoost' | playerBoost /= playerBoost']
 
 stepGame :: Game -> Int -> InEvent -> (Game, [OutEvent])
-stepGame game@Game{gameMap = gameMap@GameMap{..}, ..} time = stepGame'
+stepGame game@Game{ gameMap = gameMap@GameMap{ .. }, .. } time = stepGame'
   where
     stepGame' (InPlayerTurnLeft playerId)                = stepEvent playerId $ turn leftTurn
     stepGame' (InPlayerTurnRight playerId)               = stepEvent playerId $ turn rightTurn
@@ -130,11 +124,11 @@ stepGame game@Game{gameMap = gameMap@GameMap{..}, ..} time = stepGame'
     stepGame' (InPlayerBoostChange playerId boostActive) = stepEvent playerId $ changeBoost boostActive
 
     stepEvent pId step =
-      flip (maybe (game, [])) (Map.lookup pId gamePlayers) $ \player@Player{..} ->
+      flip (maybe (game, [])) (Map.lookup pId gamePlayers) $ \player@Player{ .. } ->
         if playerState /= PlayerAlive
         then (game, [])
         else let
-            timeElapsed = (time - playerLastEventTime)
+            timeElapsed = time - playerLastEventTime
             fullStep    = move timeElapsed >> step >> refillBoost timeElapsed
 
             (gameMap', player'@Player{ playerPosition = pos'
