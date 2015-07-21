@@ -9,7 +9,11 @@ import           Data.Tuple          (swap)
 
 type Point = (Int, Int)
 
-data Direction = Left | Right | Up | Down deriving (Show, Eq, Ord, Enum)
+data Direction = Left
+               | Up
+               | Right
+               | Down
+               deriving (Show, Eq, Ord, Enum, Bounded)
 
 data Velocity = Velocity Int Direction deriving (Show, Eq, Ord)
 
@@ -19,7 +23,7 @@ data PlayerState = PlayerAlive
                  | PlayerDead
                  | PlayerDisconnected
                  | PlayerLeft
-                 deriving (Show, Eq, Ord, Enum)
+                 deriving (Show, Eq, Ord, Enum, Bounded)
 
 type PlayerTrail = [Point]
 
@@ -40,7 +44,7 @@ data Player = Player { playerId            :: PlayerId
                      } deriving (Show, Eq)
 
 data PlayerEndState = PlayerWinner | PlayerLoser | PlayerDropped
-                      deriving (Show, Eq, Ord, Enum)
+                      deriving (Show, Eq, Ord, Enum, Bounded)
 
 data GameState = GameStarted | GameInit | GameFinished
                  deriving (Show, Eq, Ord, Enum)
