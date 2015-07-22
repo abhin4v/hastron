@@ -34,7 +34,7 @@ stepGameEngine gameSettings gameMap player =
   . (\rwst -> execRWST rwst gameSettings (gameMap, player))
   . _runGameEngine
 
-move :: Int -> GameEngine ()
+move :: TimeInterval -> GameEngine ()
 move timeElapsed = do
   state    <- get
   settings <- ask
@@ -48,7 +48,7 @@ move timeElapsed = do
       where
         (x, y)               = playerPosition
         (Velocity speed dir) = playerVelocity
-        PlayerBoost{ .. }      = playerBoost
+        PlayerBoost{ .. }    = playerBoost
         dist                 =
           timeElapsed * speed * (if boostActive && boostFuel > 0 then gameBoostFactor else 1)
 
@@ -95,9 +95,6 @@ rightTurn Right = Down
 rightTurn Up    = Right
 rightTurn Down  = Left
 
-noTurn :: Direction -> Direction
-noTurn = id
-
 turn :: (Direction -> Direction) -> GameEngine ()
 turn turnFn = modify . second $ \player@Player{ playerVelocity = Velocity speed dir } ->
   player { playerVelocity = Velocity speed $ turnFn dir }
@@ -106,21 +103,21 @@ changeBoost :: Bool -> GameEngine ()
 changeBoost boostActive = modify . second $ \player@Player{ .. } ->
   player { playerBoost = playerBoost { boostActive = boostActive } }
 
-refillBoost :: Int -> GameEngine ()
+refillBoost :: Timestamp -> GameEngine ()
 refillBoost timeElapsed = do
   (gameMap, player@Player{ .. }) <- get
   GameSettings{ .. }             <- ask
   let boostFuel'   = floor (fromIntegral timeElapsed * gameBoostRefillFactor)
-      playerBoost' = playerBoost { boostFuel = boostFuel' }
+      playerBoost' = playerBoost { boostFuel = boostFuel playerBoost + boostFuel' }
   put (gameMap, player { playerBoost = playerBoost' })
   tell $ DList.fromList [OutPlayerBoostChange playerId playerBoost' | playerBoost /= playerBoost']
 
-stepGame :: Game -> Int -> InEvent -> (Game, [OutEvent])
+stepGame :: Game -> Timestamp -> InEvent -> (Game, [OutEvent])
 stepGame game@Game{ gameMap = gameMap@GameMap{ .. }, .. } time = stepGame'
   where
     stepGame' (InPlayerTurnLeft playerId)                = stepEvent playerId $ turn leftTurn
     stepGame' (InPlayerTurnRight playerId)               = stepEvent playerId $ turn rightTurn
-    stepGame' (InPlayerIdle playerId)                    = stepEvent playerId $ turn noTurn
+    stepGame' (InPlayerIdle playerId)                    = stepEvent playerId $ return ()
     stepGame' (InPlayerBoostChange playerId boostActive) = stepEvent playerId $ changeBoost boostActive
 
     stepEvent pId step =
@@ -144,7 +141,7 @@ stepGame game@Game{ gameMap = gameMap@GameMap{ .. }, .. } time = stepGame'
 
     score (x1, y1) (x2, y2) = abs (x1 - x2) + abs (y1 - y2)
 
-runGame :: Game -> [(Int, InEvent)] -> (Game, [OutEvent])
+runGame :: Game -> [(Timestamp, InEvent)] -> (Game, [OutEvent])
 runGame initialGame =
   foldl (\(game, outEvents) (time, inEvent) ->
             fmap (outEvents ++) $ stepGame game time inEvent)
