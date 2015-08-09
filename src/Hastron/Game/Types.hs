@@ -23,6 +23,7 @@ data PlayerState    = PlayerAlive
                     | PlayerDead
                     | PlayerDisconnected
                     | PlayerLeft
+                    | PlayerStopped
                     deriving (Show, Eq, Ord, Enum)
 
 type PlayerTrail    = [Point]
